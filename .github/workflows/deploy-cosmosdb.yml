@@ -1,0 +1,47 @@
+name: Deploy Cosmos DB
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create Resource Group
+      run: |
+        az group create --name cosmos-consistency-rg --location eastus
+
+    - name: Create Cosmos DB Account
+      run: |
+        az cosmosdb create \
+          --name cosmosconsistencypoc \
+          --resource-group cosmos-consistency-rg \
+          --locations regionName=eastus failoverPriority=0 isZoneRedundant=false \
+          --locations regionName=centralindia failoverPriority=1 isZoneRedundant=false \
+          --kind GlobalDocumentDB \
+          --default-consistency-level Session \
+          --enable-multiple-write-locations true
+
+    - name: Create Cosmos DB SQL Database and Container
+      run: |
+        az cosmosdb sql database create \
+          --account-name cosmosconsistencypoc \
+          --resource-group cosmos-consistency-rg \
+          --name consistency-demo-db
+
+        az cosmosdb sql container create \
+          --account-name cosmosconsistencypoc \
+          --resource-group cosmos-consistency-rg \
+          --database-name consistency-demo-db \
+          --name messages \
+          --partition-key-path "/id"
+
+    - name: Output connection string
+      run: |
+        echo "COSMOS_ENDPOINT=$(az cosmosdb show --name cosmosconsistencypoc --resource-group cosmos-consistency-rg --query documentEndpoint -o tsv)"
+        echo "COSMOS_KEY=$(az cosmosdb keys list --name cosmosconsistencypoc --resource-group cosmos-consistency-rg --query primaryMasterKey -o tsv)"
